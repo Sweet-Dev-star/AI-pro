@@ -116,6 +116,25 @@ Icons are generated, not committed by hand: `node scripts/make-icons.js` writes 
 192/512/maskable/apple PNGs from a hand-rolled PNG writer, so the project keeps zero
 image dependencies.
 
+## Aphorisms, and why not quotations
+
+Each scheme carries one aphorism — the polarity compressed into a line worth
+repeating, sitting directly under the three control relations.
+
+> Staying proves nothing where leaving was never possible.
+
+The generator is held to three rules (`lib/generate.js`): write your own words,
+make it specific enough that the polarity can be reconstructed from it, and earn
+the turn rather than reaching for a fortune cookie.
+
+**Attributed quotations are deliberately not a feature.** Language models
+misattribute and invent quotations at a high rate, and there is no way to tell a
+real one from a fabricated one by looking at it. The failure lands on the user:
+a coach repeats a fabricated Nietzsche line to a client, and the damage is theirs.
+If this is ever wanted, it needs a verified quotation corpus with sources and a
+link out — a retrieval feature, not a generation one. The prompt currently forbids
+quotation and attribution outright.
+
 ## Ranking
 
 `relevance = 0.30 non-obvious + 0.30 tension + 0.20 positivity + 0.20 actionable`

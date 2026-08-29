@@ -342,7 +342,7 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
-  margin-bottom: 22px;
+  margin-bottom: 18px;
 }
 .relation {
   background: var(--surface);
@@ -361,6 +361,19 @@ main {
 .relation .bad { color: var(--neg); }
 .relation .synth { color: var(--mid); font-weight: 600; }
 .relation.is-synth { background: var(--surface); box-shadow: inset 2px 0 0 var(--mid); }
+
+.aphorism {
+  font-family: var(--serif);
+  font-size: 17px;
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--ink);
+  text-wrap: pretty;
+  max-width: 54ch;
+  margin: -6px 0 22px;
+  padding: 14px 0 0 16px;
+  border-left: 2px solid var(--mid);
+}
 
 .ops {
   background: var(--surface);

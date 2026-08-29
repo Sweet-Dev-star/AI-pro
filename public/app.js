@@ -284,11 +284,18 @@ function relationsBlock(s) {
       <span class="good">${a}</span><span class="op">${op}</span><span class="good">${b}</span>
       <span class="arrow">→</span><span class="${arrowClass}">${out}</span>
     </div>`;
-  return `<div class="relations">
+  const relations = `<div class="relations">
     ${row(tp, "without", ap, "bad", esc(s.thesis.negative))}
     ${row(ap, "without", tp, "bad", esc(s.antithesis.negative))}
     ${row(tp, "and", ap, "synth", esc(s.center.label), " is-synth")}
   </div>`;
+
+  // Schemes generated before the field existed simply do not show one.
+  const aphorism = s.aphorism
+    ? `<p class="aphorism">${esc(s.aphorism)}</p>`
+    : "";
+
+  return relations + aphorism;
 }
 
 // ---------------------------------------------------------------------------
