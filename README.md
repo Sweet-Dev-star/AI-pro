@@ -85,6 +85,15 @@ One axis, six positions, two operations.
 | **Ac+** | the probing operation that produces A+ |
 | **centre** | what emerges from sustained alternation — Safety/Risk → Resilience |
 
+Every scheme is also stated as three control relations, which is the same content
+in rule form:
+
+```
+T+ without A+  →  T−        Protection without Innovation  →  Stagnation
+A+ without T+  →  A−        Innovation without Protection  →  Recklessness
+T+ and    A+   →  centre    Protection and Innovation      →  Resilience
+```
+
 The load-bearing claim: a vice is never the opposite pole, it is your own pole
 overshooting because its counterpart was abandoned. Which gives the test every
 candidate A+ has to pass, and which the generator is prompted against:
@@ -93,13 +102,27 @@ candidate A+ has to pass, and which the generator is prompted against:
 
 If that sentence isn't true and non-trivial, the candidate is wrong.
 
+## Install on a phone
+
+It is a PWA. Open the deployed URL on a phone and use **Add to Home Screen**; it
+installs with an icon, launches full-screen with no browser chrome, and keeps its
+own back stack (the app bar arrow and the phone's back gesture agree).
+
+The service worker caches the app shell, and the reference corpus ships inside
+`app.js`, so an installed copy opens and runs **offline** on the built-in theses.
+Analysis calls are never cached — a stale scheme is worse than none.
+
+Icons are generated, not committed by hand: `node scripts/make-icons.js` writes the
+192/512/maskable/apple PNGs from a hand-rolled PNG writer, so the project keeps zero
+image dependencies.
+
 ## Ranking
 
 `relevance = 0.30 non-obvious + 0.30 tension + 0.20 positivity + 0.20 actionable`
 
-The four sub-scores are shown on every row on purpose. "Relevance" was never
-defined for us, so rather than guess silently the criteria are put on screen where
-they can be argued with directly. Change the weights in `lib/corpus.js`.
+The four sub-scores are shown as bars on every row. The formula itself used to be
+printed above the list and was removed — it read as a claim about the numbers on
+screen rather than an explanation of them. The weights live in `lib/corpus.js`.
 
 ## Layout
 
@@ -110,9 +133,15 @@ lib/corpus.js      24 reference schemes, the weights, the ranking function
 server.js          front door 1 — local HTTP server + static files
 api/*.js           front door 2 — Vercel functions
 public/            index.html, styles.css, app.js (incl. the wheel SVG)
+public/sw.js       app-shell cache; manifest + icons alongside
+scripts/           icon generation
 build-share.js     bundles the standalone page
 vercel.json        function runtime limits
 ```
+
+The UI is mobile-first: the base CSS is the phone layout and the `min-width`
+blocks widen it. On a phone the scheme is one column — wheel, control relations,
+centre, then the two operation sets; from 900px the operations flank the wheel.
 
 Two calls, not one: the ranked list on submit, the full scheme lazily on click.
 Cheaper, faster first paint, and it matches the interaction. The top-ranked scheme

@@ -2,9 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Polarity</title>
 <meta name="description" content="Enter a thesis. See the obligations it does not name." />
+
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#0d5450" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Polarity" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<link rel="icon" href="/icon-192.png" sizes="192x192" />
+
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@400;500;600&display=swap" />
@@ -13,8 +23,10 @@
 <body>
   <div class="shell">
     <header class="topbar">
+      <button class="nav-back" id="navback" type="button" aria-label="Back" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+      </button>
       <span class="wordmark"><b>Polarity</b></span>
-      <span class="tagline">Dialectical analysis of a thesis</span>
       <span class="mode-chip" id="mode">&nbsp;</span>
     </header>
     <main id="app"></main>

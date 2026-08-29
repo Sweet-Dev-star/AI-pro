@@ -7,6 +7,7 @@ const EMBEDDED = window.__POLARITY__ || null;
 
 const app = document.getElementById("app");
 const modeChip = document.getElementById("mode");
+const navBack = document.getElementById("navback");
 
 let config = { live: false, weights: {}, scoreLabels: {}, examples: [] };
 let current = null; // { thesis, variants }
@@ -37,7 +38,11 @@ const headers = (extra) => (ACCESS ? { ...extra, "x-polarity-access": ACCESS } :
 const request = async (path, options = {}) => {
   const res = await fetch(path, options);
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status}).`);
+  if (!res.ok) {
+    const error = new Error(data.error || `Request failed (${res.status}).`);
+    error.status = res.status;
+    throw error;
+  }
   return data;
 };
 
@@ -52,6 +57,12 @@ const relevance = (scores) =>
   Math.round(
     Object.keys(config.weights).reduce((sum, k) => sum + (scores[k] ?? 0) * config.weights[k], 0)
   );
+
+const notStocked = (label) => {
+  const error = new Error(`No worked analysis of “${label}” in this build.`);
+  error.status = 404;
+  return error;
+};
 
 const api = EMBEDDED
   ? {
@@ -68,12 +79,7 @@ const api = EMBEDDED
         const entry =
           EMBEDDED.corpus.find((t) => t.thesis.label.toLowerCase() === q) ||
           EMBEDDED.corpus.find((t) => t.id === q);
-        if (!entry) {
-          const names = EMBEDDED.corpus.map((t) => t.thesis.label).join(", ");
-          throw new Error(
-            `This shared copy carries worked analyses for ${names}. Run the app with an API key to analyse any thesis.`
-          );
-        }
+        if (!entry) throw notStocked(input.trim());
         return {
           thesis: entry.thesis,
           variants: entry.variants
@@ -85,9 +91,7 @@ const api = EMBEDDED
         const entry = EMBEDDED.corpus.find(
           (t) => t.thesis.label.toLowerCase() === thesis.trim().toLowerCase()
         );
-        const variant = entry?.variants.find(
-          (v) => v.label.toLowerCase() === label.toLowerCase()
-        );
+        const variant = entry?.variants.find((v) => v.label.toLowerCase() === label.toLowerCase());
         if (!variant) throw new Error("No scheme available for that obligation.");
         return { scheme: variant.scheme };
       }
@@ -119,6 +123,65 @@ function twoLines(text, max = 14) {
     if (!best || cost < best.cost) best = { cost, lines: [a, b] };
   }
   return best.lines;
+}
+
+// ---------------------------------------------------------------------------
+// navigation — an explicit stack, so the app bar and the phone's own back
+// gesture agree with each other
+// ---------------------------------------------------------------------------
+
+const stack = [];
+let popping = false;
+
+function syncBack() {
+  navBack.hidden = stack.length < 2;
+}
+
+function go(render) {
+  stack.push(render);
+  render();
+  syncBack();
+  window.scrollTo(0, 0);
+  if (!popping) {
+    try {
+      history.pushState({ depth: stack.length }, "");
+    } catch {
+      /* history unavailable (sandboxed frame) — the app bar still works */
+    }
+  }
+}
+
+function back() {
+  if (stack.length < 2) return;
+  try {
+    history.back(); // resolves through popstate below
+  } catch {
+    popLocal();
+  }
+}
+
+function popLocal() {
+  if (stack.length < 2) return;
+  stack.pop();
+  stack[stack.length - 1]();
+  syncBack();
+  window.scrollTo(0, 0);
+}
+
+window.addEventListener("popstate", () => {
+  popping = true;
+  popLocal();
+  popping = false;
+});
+
+navBack.addEventListener("click", back);
+
+/* Transient states (loading, errors) replace the current screen without
+   growing the stack. */
+function show(render) {
+  render();
+  syncBack();
+  window.scrollTo(0, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -159,9 +222,7 @@ function bandText(notation, name, yEyebrow, yName) {
   // The wedge narrows toward the hub, so long names step down a size rather
   // than spilling over the coloured band.
   const size = longest > 16 ? " sm" : longest > 13 ? " md" : "";
-  const spans = lines
-    .map((l, i) => `<tspan x="0" y="${yName + i * 17}">${esc(l)}</tspan>`)
-    .join("");
+  const spans = lines.map((l, i) => `<tspan x="0" y="${yName + i * 17}">${esc(l)}</tspan>`).join("");
   return `<text class="w-note" x="0" y="${yEyebrow}">${esc(notation)}</text>
           <text class="w-name${size}">${spans}</text>`;
 }
@@ -214,6 +275,22 @@ const centreMark = `<svg class="mark" viewBox="-22 -22 44 44" aria-hidden="true"
   <path d="M-9,-9 L9,9 M9,-9 L-9,9" stroke="var(--mid)" stroke-width="1.5" fill="none" />
 </svg>`;
 
+/* The scheme restated as three control relations. */
+function relationsBlock(s) {
+  const tp = esc(s.thesis.positive);
+  const ap = esc(s.antithesis.positive);
+  const row = (a, op, b, arrowClass, out, extra = "") => `
+    <div class="relation${extra}">
+      <span class="good">${a}</span><span class="op">${op}</span><span class="good">${b}</span>
+      <span class="arrow">→</span><span class="${arrowClass}">${out}</span>
+    </div>`;
+  return `<div class="relations">
+    ${row(tp, "without", ap, "bad", esc(s.thesis.negative))}
+    ${row(ap, "without", tp, "bad", esc(s.antithesis.negative))}
+    ${row(tp, "and", ap, "synth", esc(s.center.label), " is-synth")}
+  </div>`;
+}
+
 // ---------------------------------------------------------------------------
 // views
 // ---------------------------------------------------------------------------
@@ -226,14 +303,17 @@ function viewQuery(prefill = "") {
   app.innerHTML = `
     <section class="query">
       <h1>Every thesis carries an obligation it does not name.</h1>
-      <p class="lede">Enter a value, goal, or commitment. Polarity surfaces the opposing goods it
-        quietly depends on &mdash; and shows what it decays into when they are dropped.</p>
+      <p class="lede">Enter a value someone holds, or a statement they keep repeating. Polarity
+        surfaces the opposing goods it quietly depends on &mdash; and what it decays into when
+        those are dropped.</p>
       <form class="field" id="ask">
-        <input id="thesis" type="text" autocomplete="off" spellcheck="false"
-               placeholder="Safety" value="${esc(prefill)}" aria-label="Thesis" />
+        <input id="thesis" type="text" autocomplete="off" autocapitalize="sentences"
+               spellcheck="false" enterkeyhint="go"
+               placeholder="Safety &mdash; or &ldquo;we need stricter control&rdquo;"
+               value="${esc(prefill)}" aria-label="Thesis" />
         <button class="btn" type="submit">Analyse</button>
       </form>
-      <div class="examples"><span class="eyebrow">Try</span>${chips}</div>
+      <div class="examples"><span class="eyebrow">${config.live ? "Try" : "Worked examples"}</span>${chips}</div>
 
       <div class="primer">
         <div><span class="k">T+ / T&minus;</span>What the thesis becomes when it is realised, and when it overshoots.</div>
@@ -243,9 +323,9 @@ function viewQuery(prefill = "") {
     </section>`;
 
   const input = document.getElementById("thesis");
-  input.focus();
   document.getElementById("ask").addEventListener("submit", (e) => {
     e.preventDefault();
+    input.blur(); // dismiss the phone keyboard before the loading screen
     runExpand(input.value);
   });
   app.querySelectorAll("[data-example]").forEach((b) =>
@@ -254,14 +334,16 @@ function viewQuery(prefill = "") {
 }
 
 function viewLoading(title, steps) {
-  app.innerHTML = `
-    <section class="loading">
-      <span class="eyebrow">${esc(title)}</span>
-      <div class="steps" id="steps">
-        ${steps.map((s, i) => `<div class="step${i === 0 ? " on" : ""}"><span class="tick">${String(i + 1).padStart(2, "0")}</span><span>${esc(s)}</span></div>`).join("")}
-      </div>
-      <div class="sweep" style="margin-top:22px"><i></i></div>
-    </section>`;
+  show(() => {
+    app.innerHTML = `
+      <section class="loading">
+        <span class="eyebrow">${esc(title)}</span>
+        <div class="steps">
+          ${steps.map((s, i) => `<div class="step${i === 0 ? " on" : ""}"><span class="tick">${String(i + 1).padStart(2, "0")}</span><span>${esc(s)}</span></div>`).join("")}
+        </div>
+        <div class="sweep"><i></i></div>
+      </section>`;
+  });
 
   const els = [...app.querySelectorAll(".step")];
   let i = 0;
@@ -273,27 +355,35 @@ function viewLoading(title, steps) {
   return () => clearInterval(timer);
 }
 
-function viewError(message, onBack) {
-  app.innerHTML = `
-    <section>
-      <div class="crumb"><button class="btn-ghost" id="back">&larr; Back</button></div>
-      <div class="error">
-        <span class="eyebrow">Could not analyse that</span>
-        <p>${esc(message)}</p>
-      </div>
-    </section>`;
-  document.getElementById("back").addEventListener("click", onBack);
+/* Reference builds only carry the worked theses. Say so as an offer, not a wall. */
+function viewUnavailable(label, message, retry) {
+  show(() => {
+    const chips = config.examples
+      .map((e) => `<button class="chip" data-example="${esc(e)}">${esc(e)}</button>`)
+      .join("");
+    const offline = !config.live;
+    app.innerHTML = `
+      <section>
+        <div class="notice${offline ? "" : " bad"}">
+          <span class="eyebrow">${offline ? "Not in this build" : "Could not analyse that"}</span>
+          <p>${esc(message)}</p>
+          ${offline ? `<p>Live analysis of any thesis needs an API key on the server. These are ready now:</p>` : ""}
+        </div>
+        ${offline ? `<div class="examples" style="margin-top:16px">${chips}</div>` : ""}
+        <div style="margin-top:22px"><button class="btn-ghost" id="again">Try another thesis</button></div>
+      </section>`;
+
+    document.getElementById("again").addEventListener("click", () => show(() => viewQuery(label)));
+    app.querySelectorAll("[data-example]").forEach((b) =>
+      b.addEventListener("click", () => runExpand(b.dataset.example))
+    );
+  });
 }
 
 function viewList(data) {
-  const w = config.weights;
-  const formula = Object.keys(w)
-    .map((k) => `<span><b>${Math.round(w[k] * 100)}%</b> ${esc(config.scoreLabels[k] || k)}</span>`)
-    .join("");
-
   const rows = data.variants
     .map((v, i) => {
-      const bars = Object.keys(w)
+      const bars = Object.keys(config.weights)
         .map(
           (k) =>
             `<div class="bar"><span>${esc(config.scoreLabels[k] || k)}</span><i style="--v:${Math.max(0, Math.min(100, v.scores[k] ?? 0))}%"></i></div>`
@@ -302,15 +392,13 @@ function viewList(data) {
       return `
       <button class="row" data-index="${i}">
         <div class="rank">${String(i + 1).padStart(2, "0")}</div>
-        <div>
+        <div class="head">
           <div class="label">${esc(v.label)}</div>
           <div class="via">via <b>${esc(v.antithesis)}</b></div>
-          <p class="obligation">${esc(v.obligation)}</p>
         </div>
-        <div class="metrics">
-          <div class="total"><span>Relevance</span><b>${v.relevance}</b></div>
-          <div class="bars">${bars}</div>
-        </div>
+        <div class="score">${v.relevance}</div>
+        <p class="obligation">${esc(v.obligation)}</p>
+        <div class="bars">${bars}</div>
       </button>`;
     })
     .join("");
@@ -318,16 +406,15 @@ function viewList(data) {
   app.innerHTML = `
     <section>
       <div class="result-head">
-        <div class="crumb"><button class="btn-ghost" id="back">&larr; New thesis</button></div>
         <span class="eyebrow">Hidden obligations of</span>
         <h2>${esc(data.thesis.label)}</h2>
         <p class="reading">${esc(data.thesis.reading)}</p>
-        <div class="formula"><span>Relevance =</span>${formula}</div>
       </div>
       <div class="rows">${rows}</div>
+      <div style="margin-top:24px"><button class="btn-ghost" id="again">New thesis</button></div>
     </section>`;
 
-  document.getElementById("back").addEventListener("click", () => viewQuery(data.thesis.label));
+  document.getElementById("again").addEventListener("click", () => go(() => viewQuery(data.thesis.label)));
   app.querySelectorAll(".row").forEach((r) =>
     r.addEventListener("click", () => runScheme(data.variants[Number(r.dataset.index)]))
   );
@@ -336,13 +423,10 @@ function viewList(data) {
 function viewScheme(variant, scheme) {
   app.innerHTML = `
     <section>
-      <div class="crumb"><button class="btn-ghost" id="back">&larr; ${esc(current.thesis.label)}</button></div>
       <div class="scheme-head">
-        <div>
-          <span class="eyebrow">${esc(current.thesis.label)} &rarr; hidden obligation</span>
-          <h2>${esc(variant.label)}</h2>
-          <p class="obligation">${esc(variant.obligation)}</p>
-        </div>
+        <span class="eyebrow">${esc(current.thesis.label)} &rarr; hidden obligation</span>
+        <h2>${esc(variant.label)}</h2>
+        <p class="obligation">${esc(variant.obligation)}</p>
       </div>
 
       <div class="diagram">
@@ -358,6 +442,8 @@ function viewScheme(variant, scheme) {
           <ul>${scheme.operations.acPlus.map((o) => `<li>${esc(o)}</li>`).join("")}</ul>
         </div>
       </div>
+
+      ${relationsBlock(scheme)}
 
       <div class="centre">
         ${centreMark}
@@ -382,10 +468,11 @@ function viewScheme(variant, scheme) {
           <p>${esc(scheme.overshoot.antithesisSide)}</p>
         </div>
       </div>
+
+      <div style="margin-top:24px"><button class="btn-ghost" id="backlist">All obligations of ${esc(current.thesis.label)}</button></div>
     </section>`;
 
-  document.getElementById("back").addEventListener("click", () => viewList(current));
-  window.scrollTo({ top: 0, behavior: "instant" });
+  document.getElementById("backlist").addEventListener("click", back);
 }
 
 // ---------------------------------------------------------------------------
@@ -408,11 +495,11 @@ async function runExpand(input) {
     const data = await api.expand(value);
     stop();
     current = data;
-    viewList(data);
+    go(() => viewList(data));
     prefetchTop(data);
   } catch (error) {
     stop();
-    viewError(error.message, () => viewQuery(value));
+    viewUnavailable(value, error.message);
   }
 }
 
@@ -429,7 +516,7 @@ function prefetchTop(data) {
 }
 
 async function runScheme(variant) {
-  if (variant.scheme) return viewScheme(variant, variant.scheme);
+  if (variant.scheme) return go(() => viewScheme(variant, variant.scheme));
 
   const stop = viewLoading("Building the scheme", [
     "Placing the constructive and degenerate bands",
@@ -446,10 +533,11 @@ async function runScheme(variant) {
     });
     stop();
     variant.scheme = scheme;
-    viewScheme(variant, scheme);
+    go(() => viewScheme(variant, scheme));
   } catch (error) {
     stop();
-    viewError(error.message, () => viewList(current));
+    show(() => viewList(current));
+    viewUnavailable(variant.label, error.message);
   }
 }
 
@@ -460,16 +548,21 @@ async function runScheme(variant) {
     config = await api.config();
   } catch (error) {
     modeChip.textContent = "Unavailable";
-    app.innerHTML = `<section><div class="error">
+    app.innerHTML = `<section><div class="notice bad">
       <span class="eyebrow">Cannot reach the analyser</span>
       <p>${esc(error.message)}</p>
     </div></section>`;
     return;
   }
 
-  modeChip.textContent = config.live ? "Live analysis" : "Worked examples";
+  modeChip.textContent = config.live ? "Live" : "Examples";
   modeChip.title = config.live
     ? "Any thesis is analysed on demand."
-    : "This copy carries hand-checked reference analyses. Run the app with an API key for live analysis of any thesis.";
-  viewQuery();
+    : "This build carries hand-checked reference analyses. Live analysis of any thesis needs an API key on the server.";
+
+  go(() => viewQuery());
+
+  if (!EMBEDDED && "serviceWorker" in navigator && location.protocol.startsWith("http")) {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  }
 })();
